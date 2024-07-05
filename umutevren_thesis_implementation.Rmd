@@ -1,0 +1,488 @@
+---
+title: "Version 2"
+author: "Umut Evren"
+date: "2024-06-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(igraph)
+library(visNetwork)
+library(dplyr)
+library(ggraph)
+library(tidygraph)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r data}
+df_team_a <- read.csv(file = "/Users/umutevren/Downloads/teama_matrix.csv", row.names = 1, check.names = FALSE, stringsAsFactors = FALSE)
+df_team_b <- read.csv(file = "/Users/umutevren/Downloads/teamb_matrix.csv", row.names = 1, check.names = FALSE, stringsAsFactors = FALSE)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r data , echo=FALSE}
+str(df_team_a)
+str(df_team_b)
+```
+```{r}
+player_columns_a <- grep("^\\d+$", colnames(df_team_a), value = TRUE)
+matrix_team_a <- df_team_a %>%
+  select(all_of(player_columns_a)) %>%
+  as.matrix()
+```
+```{r}
+player_columns_b <- grep("^\\d+$", colnames(df_team_b), value = TRUE)
+matrix_team_b <- df_team_b %>%
+  select(all_of(player_columns_b)) %>%
+  as.matrix()
+```
+
+```{r}
+net_adj_a <- graph.adjacency(matrix_team_a, weighted = TRUE, diag = FALSE)
+net_adj_b <- graph.adjacency(matrix_team_b, weighted = TRUE, diag = FALSE)
+```
+
+```{r}
+net_adj_a
+```
+```{r}
+png("/Users/umutevren/Documents/v001_team_networks.png", width = 800, height = 600)
+set.seed(1234)
+par(mfrow=c(1,2))
+plot(net_adj_a,main="Go Ahead Team A")
+plot(net_adj_b,main="Go Ahead Team B")
+par(mfrow=c(1,1))
+```
+
+```{r}
+V(net_adj_a)$label <- as.character(df_team_a$Player)
+V(net_adj_b)$label <- as.character(df_team_b$Player)
+```
+
+```{r}
+V(net_adj_a)$color <-c("blue","yellow","blue","red","red","blue","green","red","yellow","yellow","red") 
+V(net_adj_b)$color <-c("green","yellow","red","blue","yellow","yellow","yellow","red","red","blue","blue") 
+
+V(net_adj_a)$size <- degree(net_adj_a)
+V(net_adj_b)$size <- degree(net_adj_b)
+```
+
+```{r}
+### differentiating edges width basing on their weights:
+E(net_adj_a)$width <- E(net_adj_a)$weight
+E(net_adj_b)$width <- E(net_adj_b)$weight
+
+### highlight strong ties:
+Amed <- median(E(net_adj_a)$weight)
+Bmed <- median(E(net_adj_b)$weight)
+E(net_adj_a)$color <- ifelse(E(net_adj_a)$weight>Amed,"gray30","gray70")
+E(net_adj_b)$color <- ifelse(E(net_adj_b)$weight>Bmed,"gray30","gray70")
+```
+
+```{r}
+### differentiating edges width basing on their weights:
+A_coords <- data.frame(row.names = V(net_adj_a)$label,
+                       "x" = c(-1, 0.2, -0.75, 0, 0.75, 0.5, 0, 0, -0.5, -0.5, -0.75),
+                     "y" = c(0.50, 0.2, 0.8, -0.5, -0.5, 1, -1, -0.3, 0, 0.45, -0.5))
+B_coords <- data.frame(row.names = V(net_adj_b)$label,
+                        "x" = c(0, 0.5, -0.74, 0.78, 0, 0.15, -0.5, 0, 0.75, -0.73, 0),
+  "y" = c(-1, 0, -0.25, 0.8, 0, 0.3, 0.25, -0.5, -0.25, 0.79, 0.75)
+)
+
+```
+
+```{r}
+plot(net_adj_a,
+     main = "Team A",
+     layout = as.matrix(A_coords),
+     vertex.label.dist = 2,
+     edge.arrow.size = 0.4,
+     edge.curved = 0.1,
+     vertex.size = 10)
+```
+
+```{r}
+plot(net_adj_b,
+     main = "Team B",
+     layout = as.matrix(B_coords),
+     vertex.label.dist = 2,
+     edge.arrow.size = 0.4,
+     edge.curved = 0.1,
+     vertex.size = 10)
+```
+```{r}
+graph_tbl_b <- as_tbl_graph(net_adj_b)
+
+gg_degree_b_example <- ggraph(graph_tbl_b, layout = as.matrix(B_coords)) +
+  geom_edge_link(aes(edge_alpha = after_stat(index), color = after_stat(index)), width = 0.8,
+                 arrow = arrow(length = unit(4, 'mm')), end_cap = circle(3, 'mm')) +
+  geom_node_point(aes(color = V(net_adj_b)$color, size = 10)) +
+  geom_node_text(aes(label = V(net_adj_b)$name), repel = TRUE, size = 5) +
+  scale_edge_alpha(range = c(0.4, 1)) +
+  scale_edge_color_gradient(low = "grey", high = "black") +
+  theme_void() +
+  theme(
+    panel.background = element_rect(fill = "white", color = "white"),
+    plot.background = element_rect(fill = "white", color = "white")
+  ) +
+  ggtitle("Team B")
+
+#ggsave("gg_degree_b_example.png", plot = gg_degree_b_example, width = 10, height = 8, dpi = 300)
+```
+
+```{r}
+nodes_b_v2 <- data.frame(id = V(net_adj_b)$name, label = V(net_adj_b)$name, color = V(net_adj_b)$color)
+edges_b_v2 <- data.frame(from = as.character(ends(net_adj_b, E(net_adj_b))[,1]),
+                    to = as.character(ends(net_adj_b, E(net_adj_b))[,2]),
+                    arrows = "to")
+
+# Create the visNetwork plot
+visNetwork(nodes_b_v2, edges_b_v2, main = "Team B") %>%
+  visNodes(size = 30) %>%                   # Increase node size
+  visEdges(arrows = 'to') %>%
+  visOptions(highlightNearest = TRUE) %>%
+  visInteraction(navigationButtons = TRUE)
+```
+```{r}
+bt_adj_a<- graph.adjacency(matrix_team_a, weighted = TRUE, diag = FALSE)
+bt_score_a <- betweenness(bt_adj_a)
+bt_score_a
+```
+```{r}
+bt_df_a <- data.frame(Node = node_names_a, Betweenness = bt_score_a)
+bt_df_a
+
+```
+```{r}
+bt_adj_b<- graph.adjacency(matrix_team_b, weighted = TRUE, diag = FALSE)
+bt_score_b <- betweenness(bt_adj_b)
+bt_score_b
+```
+```{r}
+bt_df_b <- data.frame(Node = node_names_b, Betweenness = bt_score_b)
+bt_df_b
+```
+```{r}
+bt_df_a_v2 <- bt_df_a %>%
+  arrange(desc(Betweenness)) %>%
+  mutate(color = "")
+```
+```{r}
+bt_df_b_v2 <- bt_df_b %>%
+  arrange(desc(Betweenness)) %>%
+  mutate(color = "")
+```
+
+```{r}
+bt_a_table <- gt(data = bt_df_a_v2) %>%
+  data_color(
+    columns = vars(Betweenness),
+    target_columns = vars(color),
+    method = "numeric",
+    palette = "viridis",
+    domain = range(bt_df_a_v2$Betweenness)
+  ) %>%
+  cols_label(
+    Node = "Node",
+    Betweenness = "Betweenness",
+    color = ""
+  ) %>%
+  opt_vertical_padding(scale = 0.65) %>%
+  tab_caption(
+    caption = "Team A (Betweenness)"
+  )
+bt_a_table
+```
+```{r}
+bt_b_table <- gt(data = bt_df_b_v2) %>%
+  data_color(
+    columns = vars(Betweenness),
+    target_columns = vars(color),
+    method = "numeric",
+    palette = "viridis",
+    domain = range(bt_df_b_v2$Betweenness)
+  ) %>%
+  cols_label(
+    Node = "Node",
+    Betweenness = "Betweenness",
+    color = ""
+  ) %>%
+  opt_vertical_padding(scale = 0.65) %>%
+  tab_caption(
+    caption = "Team B (Betweenness)"
+  )
+bt_b_table
+```
+```{r}
+gtsave(bt_b_table, filename = "bt_b_table.png")
+gtsave(bt_a_table, filename = "bt_a_table.png")
+```
+
+
+
+
+
+
+
+
+
+```{r}
+page_rank_result_b <- page_rank(net_adj_b, directed = TRUE, damping = 0.85)
+
+# Display the PageRank values for each node
+page_rank_values_b <- page_rank_result_b$vector
+print(page_rank_values_b)
+```
+
+
+```{r}
+node_names_b <- V(net_adj_b)$name
+page_rank_df_b <- data.frame(Node = node_names_b, PageRank = page_rank_values_b)
+
+# Print the DataFrame
+print(page_rank_df_b)
+
+```
+
+
+```{r}
+page_rank_result_a <- page_rank(net_adj_a, directed = TRUE, damping = 0.85)
+
+# Display the PageRank values for each node
+page_rank_values_a <- page_rank_result_a$vector
+print(page_rank_values_a)
+```
+
+```{r}
+node_names_a <- V(net_adj_a)$name
+page_rank_df_a <- data.frame(Node = node_names_a, PageRank = page_rank_values_a)
+
+# Print the DataFrame
+print(page_rank_df_a)
+```
+```{r}
+page_rank_df_a$Group <- "Team A"
+page_rank_df_b$Group <- "Team B"
+combined_pagerank_df <- rbind(page_rank_df_a, page_rank_df_b)
+combined_pagerank_df_v2 <- combined_pagerank_df %>%
+  arrange(Group, desc(PageRank)) %>%
+  mutate(color = "")
+```
+
+```{r}
+page_rank_df_a_v2 <- page_rank_df_a %>%
+  arrange(desc(PageRank)) %>%
+  mutate(color = "")
+```
+
+```{r}
+page_rank_df_b_v2 <- page_rank_df_b %>%
+  arrange(desc(PageRank)) %>%
+  mutate(color = "")
+```
+
+
+```{r}
+library(gt)
+pr_a_table <- gt(data = page_rank_df_a_v2) %>%
+  cols_hide(columns = vars(Group)) %>%
+  data_color(
+    columns = vars(PageRank),
+    target_columns = vars(color),
+    method = "numeric",
+    palette = "viridis",
+    domain = range(page_rank_df_a_v2$PageRank)
+  ) %>%
+  cols_label(
+    Node = "Node",
+    PageRank = "PageRank",
+    color = ""
+  ) %>%
+  opt_vertical_padding(scale = 0.65) %>%
+  tab_caption(
+    caption = "Team A (PR)"
+  )
+pr_a_table
+```
+```{r}
+pr_b_table <- gt(data = page_rank_df_b_v2) %>%
+  cols_hide(columns = vars(Group)) %>%
+  data_color(
+    columns = vars(PageRank),
+    target_columns = vars(color),
+    method = "numeric",
+    palette = "viridis",
+    domain = range(page_rank_df_b_v2$PageRank)
+  ) %>%
+  cols_label(
+    Node = "Node",
+    PageRank = "PageRank",
+    color = ""
+  ) %>%
+  opt_vertical_padding(scale = 0.65) %>%
+  tab_caption(
+    caption = "Team B (PR)"
+  )
+pr_b_table
+```
+```{r}
+gtsave(pr_b_table, filename = "pr_b_table.png")
+```
+
+
+```{r}
+gtsave(pr_a_table, filename = "pr_a_table.png")
+```
+
+
+
+
+
+```{r}
+library(circlize)
+```
+
+```{r}
+df_team_a_v2 <- df_team_a[, -c(ncol(df_team_a) - 1, ncol(df_team_a))]  # Remove the last two columns
+rownames(df_team_a_v2) <- df_team_a_v2[, 1]
+df_team_a_v2 <- df_team_a_v2[, -1]
+
+# Convert to adjacency matrix and ensure row and column names are set correctly
+matrix_df_team_a_v2 <- as.matrix(df_team_a_v2)
+colnames(matrix_df_team_a_v2) <- rownames(matrix_df_team_a_v2)
+
+# Create pass pairs data frame
+pairs_matrix_df_team_a_v2 <- as.data.frame(as.table(matrix_df_team_a_v2))
+pairs_matrix_df_team_a_v2 <- pairs_matrix_df_team_a_v2 %>% filter(Freq > 0) %>% rename(from = Var1, to = Var2, value = Freq)
+
+# Display to verify
+print(pairs_matrix_df_team_a_v2)
+
+```
+```{r}
+df_team_b_v2 <- df_team_b[, -c(ncol(df_team_b) - 1, ncol(df_team_b))]  # Remove the last two columns
+rownames(df_team_b_v2) <- df_team_b_v2[, 1]
+df_team_b_v2 <- df_team_b_v2[, -1]
+
+# Convert to adjacency matrix and ensure row and column names are set correctly
+matrix_df_team_b_v2 <- as.matrix(df_team_b_v2)
+colnames(matrix_df_team_b_v2) <- rownames(matrix_df_team_b_v2)
+
+# Create pass pairs data frame
+pairs_matrix_df_team_b_v2 <- as.data.frame(as.table(matrix_df_team_b_v2))
+pairs_matrix_df_team_b_v2 <- pairs_matrix_df_team_b_v2 %>% filter(Freq > 0) %>% rename(from = Var1, to = Var2, value = Freq)
+
+# Display to verify
+print(pairs_matrix_df_team_b_v2)
+```
+```{r}
+scaled_lwd_a_2 <- pairs_matrix_df_team_a_v2$value / max(pairs_matrix_df_team_a_v2$value) * 10
+
+# Save Chord diagram for Team A to a PNG file
+png("team_a_chord_v8.png", width = 1600, height = 1600, res = 150)
+circos.clear()  # Clear any existing plot
+chordDiagram(pairs_matrix_df_team_a_v2, 
+             transparency = 0.5,   # Adjust transparency for better readability
+             annotationTrack = "grid",
+             preAllocateTracks = 1,
+             link.lwd = scaled_lwd_a_2,  # Thicker lines based on pass value
+             annotationTrackHeight = mm_h(4),
+            link.border = 0.1)  
+
+#title("Team A - Pass Pairs", cex.main = 1, line = -0.05)
+
+# Add text labels with better spacing and readability
+circos.track(track.index = 1, panel.fun = function(x, y) {
+  circos.text(CELL_META$xcenter, CELL_META$ylim[1], CELL_META$sector.index, 
+              facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.5), 
+              cex = 1.2, col = "black")
+}, bg.border = NA)
+```
+
+
+
+
+
+
+
+```{r}
+scaled_lwd_b_2 <- pairs_matrix_df_team_b_v2$value / max(pairs_matrix_df_team_b_v2$value) * 10
+
+# Save Chord diagram for Team A to a PNG file
+#png("team_b_chord_v2.png", width = 1600, height = 1600, res = 150)
+circos.clear()  # Clear any existing plot
+chordDiagram(pairs_matrix_df_team_b_v2, 
+             transparency = 0.5,   # Adjust transparency for better readability
+             annotationTrack = "grid",
+             preAllocateTracks = 1,
+             link.lwd = scaled_lwd_b_2,  # Thicker lines based on pass value
+             annotationTrackHeight = mm_h(4),
+            link.border = 0.1)  
+
+title("Team B - Pass Pairs", cex.main = 1, line = -0.05)
+
+# Add text labels with better spacing and readability
+circos.track(track.index = 1, panel.fun = function(x, y) {
+  circos.text(CELL_META$xcenter, CELL_META$ylim[1], CELL_META$sector.index, 
+              facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.5), 
+              cex = 0.8, col = "black")
+}, bg.border = NA)
+
+```
+```{r}
+ggraph(net_adj_b,layout=B_coords) +
+  geom_edge_fan(aes(width=width,colour=color),alpha=0.6,
+                arrow = arrow(length = unit(4, 'mm')),
+                start_cap = circle(3, 'mm'),
+                end_cap = circle(3, 'mm')
+                ) +
+  geom_node_point(aes(label = label,size=size,colour=color)) +
+  geom_node_text(aes(label = label), repel=TRUE) +
+  scale_edge_color_manual(values = c("gray30","gray70")) +
+  ggtitle("Team B") + 
+  theme_graph() +
+  theme(legend.position = "none")
+
+ggsave("old_school_Team_B_graph.png", width = 10, height = 7)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
