@@ -1,0 +1,432 @@
+---
+title: "Football Match Network Analysis"
+author: "Umut Evren"
+date: "2024-06-22"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: united
+    highlight: tango
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+# Load required libraries
+library(igraph)        # For network analysis and visualization
+library(visNetwork)    # For interactive network visualization
+library(dplyr)         # For data manipulation
+library(ggraph)        # For network visualization
+library(tidygraph)     # For network data manipulation
+library(gt)            # For creating beautiful tables
+library(circlize)      # For chord diagrams
+
+# Set global options
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 10,
+  fig.height = 7
+)
+```
+
+# Introduction
+
+This document presents a comprehensive network analysis of football match data, focusing on passing patterns and player interactions between two teams. The analysis includes various network metrics, visualizations, and statistical measures to understand team dynamics and player roles.
+
+# Data Loading and Preparation
+
+```{r data_loading}
+# Load team matrices
+df_team_a <- read.csv(
+  file = "/Users/umutevren/Downloads/teama_matrix.csv", 
+  row.names = 1, 
+  check.names = FALSE, 
+  stringsAsFactors = FALSE
+)
+
+df_team_b <- read.csv(
+  file = "/Users/umutevren/Downloads/teamb_matrix.csv", 
+  row.names = 1, 
+  check.names = FALSE, 
+  stringsAsFactors = FALSE
+)
+
+# Display data structure
+str(df_team_a)
+str(df_team_b)
+```
+
+# Network Construction
+
+## Data Preparation
+
+```{r network_preparation}
+# Extract player columns and create matrices
+player_columns_a <- grep("^\\d+$", colnames(df_team_a), value = TRUE)
+player_columns_b <- grep("^\\d+$", colnames(df_team_b), value = TRUE)
+
+matrix_team_a <- df_team_a %>%
+  select(all_of(player_columns_a)) %>%
+  as.matrix()
+
+matrix_team_b <- df_team_b %>%
+  select(all_of(player_columns_b)) %>%
+  as.matrix()
+
+# Create network objects
+net_adj_a <- graph.adjacency(matrix_team_a, weighted = TRUE, diag = FALSE)
+net_adj_b <- graph.adjacency(matrix_team_b, weighted = TRUE, diag = FALSE)
+```
+
+## Network Properties
+
+```{r network_properties}
+# Set vertex labels
+V(net_adj_a)$label <- as.character(df_team_a$Player)
+V(net_adj_b)$label <- as.character(df_team_b$Player)
+
+# Set vertex colors
+V(net_adj_a)$color <- c("blue","yellow","blue","red","red","blue","green","red","yellow","yellow","red")
+V(net_adj_b)$color <- c("green","yellow","red","blue","yellow","yellow","yellow","red","red","blue","blue")
+
+# Set vertex sizes based on degree
+V(net_adj_a)$size <- degree(net_adj_a)
+V(net_adj_b)$size <- degree(net_adj_b)
+
+# Set edge properties
+E(net_adj_a)$width <- E(net_adj_a)$weight
+E(net_adj_b)$width <- E(net_adj_b)$weight
+
+# Highlight strong ties
+Amed <- median(E(net_adj_a)$weight)
+Bmed <- median(E(net_adj_b)$weight)
+E(net_adj_a)$color <- ifelse(E(net_adj_a)$weight > Amed, "gray30", "gray70")
+E(net_adj_b)$color <- ifelse(E(net_adj_b)$weight > Bmed, "gray30", "gray70")
+```
+
+# Network Visualization
+
+## Basic Network Plots
+
+```{r basic_network_plots}
+# Save combined network plot
+png("/Users/umutevren/Documents/v001_team_networks.png", width = 800, height = 600)
+set.seed(1234)
+par(mfrow = c(1,2))
+plot(net_adj_a, main = "Go Ahead Team A")
+plot(net_adj_b, main = "Go Ahead Team B")
+par(mfrow = c(1,1))
+dev.off()
+```
+
+## Custom Layout Network Plots
+
+```{r custom_layout}
+# Define custom coordinates for better visualization
+A_coords <- data.frame(
+  row.names = V(net_adj_a)$label,
+  "x" = c(-1, 0.2, -0.75, 0, 0.75, 0.5, 0, 0, -0.5, -0.5, -0.75),
+  "y" = c(0.50, 0.2, 0.8, -0.5, -0.5, 1, -1, -0.3, 0, 0.45, -0.5)
+)
+
+B_coords <- data.frame(
+  row.names = V(net_adj_b)$label,
+  "x" = c(0, 0.5, -0.74, 0.78, 0, 0.15, -0.5, 0, 0.75, -0.73, 0),
+  "y" = c(-1, 0, -0.25, 0.8, 0, 0.3, 0.25, -0.5, -0.25, 0.79, 0.75)
+)
+
+# Plot networks with custom layout
+plot(net_adj_a,
+     main = "Team A",
+     layout = as.matrix(A_coords),
+     vertex.label.dist = 2,
+     edge.arrow.size = 0.4,
+     edge.curved = 0.1,
+     vertex.size = 10)
+
+plot(net_adj_b,
+     main = "Team B",
+     layout = as.matrix(B_coords),
+     vertex.label.dist = 2,
+     edge.arrow.size = 0.4,
+     edge.curved = 0.1,
+     vertex.size = 10)
+```
+
+## Advanced Network Visualizations
+
+```{r advanced_visualizations}
+# Create interactive network visualization for Team B
+nodes_b_v2 <- data.frame(
+  id = V(net_adj_b)$name,
+  label = V(net_adj_b)$name,
+  color = V(net_adj_b)$color
+)
+
+edges_b_v2 <- data.frame(
+  from = as.character(ends(net_adj_b, E(net_adj_b))[,1]),
+  to = as.character(ends(net_adj_b, E(net_adj_b))[,2]),
+  arrows = "to"
+)
+
+# Interactive network plot
+visNetwork(nodes_b_v2, edges_b_v2, main = "Team B") %>%
+  visNodes(size = 30) %>%
+  visEdges(arrows = 'to') %>%
+  visOptions(highlightNearest = TRUE) %>%
+  visInteraction(navigationButtons = TRUE)
+```
+
+# Network Analysis
+
+## Betweenness Centrality
+
+```{r betweenness_analysis}
+# Calculate betweenness centrality
+bt_adj_a <- graph.adjacency(matrix_team_a, weighted = TRUE, diag = FALSE)
+bt_adj_b <- graph.adjacency(matrix_team_b, weighted = TRUE, diag = FALSE)
+
+bt_score_a <- betweenness(bt_adj_a)
+bt_score_b <- betweenness(bt_adj_b)
+
+# Create data frames for visualization
+bt_df_a <- data.frame(Node = node_names_a, Betweenness = bt_score_a)
+bt_df_b <- data.frame(Node = node_names_b, Betweenness = bt_score_b)
+
+# Prepare data for tables
+bt_df_a_v2 <- bt_df_a %>%
+  arrange(desc(Betweenness)) %>%
+  mutate(color = "")
+
+bt_df_b_v2 <- bt_df_b %>%
+  arrange(desc(Betweenness)) %>%
+  mutate(color = "")
+
+# Create formatted tables
+bt_a_table <- gt(data = bt_df_a_v2) %>%
+  data_color(
+    columns = vars(Betweenness),
+    target_columns = vars(color),
+    method = "numeric",
+    palette = "viridis",
+    domain = range(bt_df_a_v2$Betweenness)
+  ) %>%
+  cols_label(
+    Node = "Node",
+    Betweenness = "Betweenness",
+    color = ""
+  ) %>%
+  opt_vertical_padding(scale = 0.65) %>%
+  tab_caption(caption = "Team A (Betweenness)")
+
+bt_b_table <- gt(data = bt_df_b_v2) %>%
+  data_color(
+    columns = vars(Betweenness),
+    target_columns = vars(color),
+    method = "numeric",
+    palette = "viridis",
+    domain = range(bt_df_b_v2$Betweenness)
+  ) %>%
+  cols_label(
+    Node = "Node",
+    Betweenness = "Betweenness",
+    color = ""
+  ) %>%
+  opt_vertical_padding(scale = 0.65) %>%
+  tab_caption(caption = "Team B (Betweenness)")
+
+# Display tables
+bt_a_table
+bt_b_table
+
+# Save tables
+gtsave(bt_b_table, filename = "bt_b_table.png")
+gtsave(bt_a_table, filename = "bt_a_table.png")
+```
+
+## PageRank Analysis
+
+```{r pagerank_analysis}
+# Calculate PageRank
+page_rank_result_a <- page_rank(net_adj_a, directed = TRUE, damping = 0.85)
+page_rank_result_b <- page_rank(net_adj_b, directed = TRUE, damping = 0.85)
+
+# Create data frames
+page_rank_df_a <- data.frame(
+  Node = node_names_a,
+  PageRank = page_rank_result_a$vector,
+  Group = "Team A"
+)
+
+page_rank_df_b <- data.frame(
+  Node = node_names_b,
+  PageRank = page_rank_result_b$vector,
+  Group = "Team B"
+)
+
+# Prepare data for visualization
+page_rank_df_a_v2 <- page_rank_df_a %>%
+  arrange(desc(PageRank)) %>%
+  mutate(color = "")
+
+page_rank_df_b_v2 <- page_rank_df_b %>%
+  arrange(desc(PageRank)) %>%
+  mutate(color = "")
+
+# Create formatted tables
+pr_a_table <- gt(data = page_rank_df_a_v2) %>%
+  cols_hide(columns = vars(Group)) %>%
+  data_color(
+    columns = vars(PageRank),
+    target_columns = vars(color),
+    method = "numeric",
+    palette = "viridis",
+    domain = range(page_rank_df_a_v2$PageRank)
+  ) %>%
+  cols_label(
+    Node = "Node",
+    PageRank = "PageRank",
+    color = ""
+  ) %>%
+  opt_vertical_padding(scale = 0.65) %>%
+  tab_caption(caption = "Team A (PageRank)")
+
+pr_b_table <- gt(data = page_rank_df_b_v2) %>%
+  cols_hide(columns = vars(Group)) %>%
+  data_color(
+    columns = vars(PageRank),
+    target_columns = vars(color),
+    method = "numeric",
+    palette = "viridis",
+    domain = range(page_rank_df_b_v2$PageRank)
+  ) %>%
+  cols_label(
+    Node = "Node",
+    PageRank = "PageRank",
+    color = ""
+  ) %>%
+  opt_vertical_padding(scale = 0.65) %>%
+  tab_caption(caption = "Team B (PageRank)")
+
+# Display tables
+pr_a_table
+pr_b_table
+
+# Save tables
+gtsave(pr_b_table, filename = "pr_b_table.png")
+gtsave(pr_a_table, filename = "pr_a_table.png")
+```
+
+# Chord Diagrams
+
+## Data Preparation for Chord Diagrams
+
+```{r chord_preparation}
+# Prepare Team A data
+df_team_a_v2 <- df_team_a[, -c(ncol(df_team_a) - 1, ncol(df_team_a))]
+rownames(df_team_a_v2) <- df_team_a_v2[, 1]
+df_team_a_v2 <- df_team_a_v2[, -1]
+
+matrix_df_team_a_v2 <- as.matrix(df_team_a_v2)
+colnames(matrix_df_team_a_v2) <- rownames(matrix_df_team_a_v2)
+
+pairs_matrix_df_team_a_v2 <- as.data.frame(as.table(matrix_df_team_a_v2)) %>%
+  filter(Freq > 0) %>%
+  rename(from = Var1, to = Var2, value = Freq)
+
+# Prepare Team B data
+df_team_b_v2 <- df_team_b[, -c(ncol(df_team_b) - 1, ncol(df_team_b))]
+rownames(df_team_b_v2) <- df_team_b_v2[, 1]
+df_team_b_v2 <- df_team_b_v2[, -1]
+
+matrix_df_team_b_v2 <- as.matrix(df_team_b_v2)
+colnames(matrix_df_team_b_v2) <- rownames(matrix_df_team_b_v2)
+
+pairs_matrix_df_team_b_v2 <- as.data.frame(as.table(matrix_df_team_b_v2)) %>%
+  filter(Freq > 0) %>%
+  rename(from = Var1, to = Var2, value = Freq)
+```
+
+## Create Chord Diagrams
+
+```{r chord_diagrams}
+# Team A Chord Diagram
+scaled_lwd_a_2 <- pairs_matrix_df_team_a_v2$value / max(pairs_matrix_df_team_a_v2$value) * 10
+
+png("team_a_chord_v8.png", width = 1600, height = 1600, res = 150)
+circos.clear()
+chordDiagram(pairs_matrix_df_team_a_v2,
+             transparency = 0.5,
+             annotationTrack = "grid",
+             preAllocateTracks = 1,
+             link.lwd = scaled_lwd_a_2,
+             annotationTrackHeight = mm_h(4),
+             link.border = 0.1)
+
+circos.track(track.index = 1, panel.fun = function(x, y) {
+  circos.text(CELL_META$xcenter, CELL_META$ylim[1], CELL_META$sector.index,
+              facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.5),
+              cex = 1.2, col = "black")
+}, bg.border = NA)
+dev.off()
+
+# Team B Chord Diagram
+scaled_lwd_b_2 <- pairs_matrix_df_team_b_v2$value / max(pairs_matrix_df_team_b_v2$value) * 10
+
+png("team_b_chord_v2.png", width = 1600, height = 1600, res = 150)
+circos.clear()
+chordDiagram(pairs_matrix_df_team_b_v2,
+             transparency = 0.5,
+             annotationTrack = "grid",
+             preAllocateTracks = 1,
+             link.lwd = scaled_lwd_b_2,
+             annotationTrackHeight = mm_h(4),
+             link.border = 0.1)
+
+title("Team B - Pass Pairs", cex.main = 1, line = -0.05)
+
+circos.track(track.index = 1, panel.fun = function(x, y) {
+  circos.text(CELL_META$xcenter, CELL_META$ylim[1], CELL_META$sector.index,
+              facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.5),
+              cex = 0.8, col = "black")
+}, bg.border = NA)
+dev.off()
+```
+
+# Advanced Network Visualization
+
+```{r advanced_network}
+# Create advanced network visualization for Team B
+ggraph(net_adj_b, layout = B_coords) +
+  geom_edge_fan(aes(width = width, colour = color),
+                alpha = 0.6,
+                arrow = arrow(length = unit(4, 'mm')),
+                start_cap = circle(3, 'mm'),
+                end_cap = circle(3, 'mm')) +
+  geom_node_point(aes(label = label, size = size, colour = color)) +
+  geom_node_text(aes(label = label), repel = TRUE) +
+  scale_edge_color_manual(values = c("gray30", "gray70")) +
+  ggtitle("Team B") +
+  theme_graph() +
+  theme(legend.position = "none")
+
+ggsave("old_school_Team_B_graph.png", width = 10, height = 7)
+```
+
+# Conclusion
+
+This analysis provides a comprehensive view of team dynamics through network analysis. The visualizations and metrics help understand:
+
+1. Player interactions and passing patterns
+2. Key players based on betweenness centrality
+3. Player importance through PageRank analysis
+4. Team structure and flow through chord diagrams
+5. Network properties and characteristics
+
+The results can be used to:
+- Identify key players and their roles
+- Understand team strategies and patterns
+- Compare team structures and dynamics
+- Make data-driven decisions for team improvement 
